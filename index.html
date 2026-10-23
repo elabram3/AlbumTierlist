@@ -419,8 +419,11 @@ async function exportImage(){
     ctx.textAlign="left";ctx.textBaseline="alphabetic";
     y+=rowH+gap;
   });
-  ctx.fillStyle=css("--muted");ctx.font=`600 30px ${css("--body")}`;ctx.textAlign="center";
-  ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-110);
+  ctx.textAlign="center";
+  ctx.fillStyle=css("--fg");ctx.font=`700 34px ${css("--body")}`;
+  ctx.fillText("Haz el tuyo",W/2,H-150);
+  ctx.fillStyle=css("--muted");ctx.font=`600 30px ${css("--body")}`;
+  ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-106);
   return c;
 }
 let lastBlob=null;
