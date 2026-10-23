@@ -224,8 +224,17 @@ let lastSearch=null;
 async function showArtist(ar){
   $("results").innerHTML="";msg("Cargando discografía…");
   try{
-    const d=await itunes(`lookup?id=${ar.artistId}&entity=album&limit=200&country=MX`);
-    const all=d.results.filter(x=>x.wrapperType==="collection");
+    let all=[];
+    try{
+      const d=await itunes(`lookup?id=${ar.artistId}&entity=album&limit=200&country=MX`);
+      all=d.results.filter(x=>x.wrapperType==="collection");
+    }catch(e){}
+    if(!all.length){
+      const name=ar.artistName.toLowerCase();
+      const d2=await itunes(`search?term=${encodeURIComponent(ar.artistName)}&entity=album&attribute=artistTerm&limit=200&country=MX`);
+      all=d2.results.filter(x=>x.collectionId&&(x.artistId===ar.artistId||(x.artistName||"").toLowerCase().includes(name)));
+    }
+    const seen=new Set();all=all.filter(x=>!seen.has(x.collectionId)&&seen.add(x.collectionId));
     const full=all.filter(isFull);
     const list=(full.length?full:all).sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate));
     msg(list.length?"":"Este artista no tiene álbumes disponibles.");
