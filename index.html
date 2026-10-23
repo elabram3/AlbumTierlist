@@ -52,7 +52,9 @@ textarea{width:100%;box-sizing:border-box;min-height:140px;margin-top:10px;backg
 .row2 input{flex:1;min-width:120px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit}
 
 /* álbum activo */
-.album{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.album{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.album-text{min-width:0;display:flex;flex-direction:column;gap:4px}
+.album img{width:64px;height:64px;flex:0 0 64px;border-radius:10px;object-fit:cover}
 .album h2{font-family:var(--display);font-size:22px;margin:0;line-height:1.1}
 .album span{color:var(--muted);font-size:14px}
 .hint{color:var(--muted);font-size:13px;margin:-8px 0 0}
@@ -109,8 +111,11 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
   </details>
 
   <div class="album">
-    <h2 id="albumTitle"></h2>
-    <span id="albumArtist"></span>
+    <div class="album-text">
+      <h2 id="albumTitle"></h2>
+      <span id="albumArtist"></span>
+    </div>
+    <img id="albumCover" alt="Portada del álbum" hidden>
   </div>
   <p class="hint">Toca una canción y luego toca la fila donde va.</p>
 
@@ -152,6 +157,7 @@ const $=id=>document.getElementById(id);
 // ===== álbum =====
 function setAlbum(album,artist,titles,place){
   state={album,artist,tracks:titles.map((t,i)=>({id:i,title:t,tier:place?place[i]:-1}))};
+  setCover(null);
   selected=null;$("preview").hidden=true;render();
 }
 
@@ -287,7 +293,7 @@ async function pickAlbum(a,artistName){
     const songs=(d.data||[]).map(x=>x.title);
     if(!songs.length)throw new Error("empty");
     msg("");setAlbum(a.title,artistName||(a.artist&&a.artist.name)||"",songs);
-    colorFromCover(a.cover_medium);
+    colorFromCover(a.cover_medium);setCover(a.cover_big||a.cover_medium);
   }catch(e){msg("No pude cargar las canciones de ese álbum.")}
 }
 
@@ -319,6 +325,14 @@ function pickColor(img){
   return[hex(r,g,b),cw>=cd?"#ffffff":"#111111"];
 }
 function applyTile([bg,fg]){const r=document.documentElement.style;r.setProperty("--tile",bg);r.setProperty("--tile-fg",fg)}
+let coverImg=null;
+function setCover(url){
+  coverImg=null;const el=$("albumCover");el.hidden=true;el.removeAttribute("src");
+  if(!url)return;
+  const img=new Image();img.crossOrigin="anonymous";
+  img.onload=()=>{coverImg=img;el.src=url;el.hidden=false};
+  img.src=url;
+}
 function colorFromCover(url){
   applyTile(DEFAULT_TILE);if(!url)return;
   const img=new Image();img.crossOrigin="anonymous";
@@ -344,7 +358,7 @@ $("clearBtn").addEventListener("click",()=>{
   }
   clearTimeout(clearTimer);b.classList.remove("confirm");b.textContent="Borrar todo";
   state={album:"",artist:"",tracks:[]};selected=null;lastSearch=null;lastBlob=null;
-  $("q").value="";$("results").innerHTML="";msg("");$("preview").hidden=true;applyTile(DEFAULT_TILE);
+  $("q").value="";$("results").innerHTML="";msg("");$("preview").hidden=true;applyTile(DEFAULT_TILE);setCover(null);
   render();window.scrollTo({top:0,behavior:"smooth"});$("q").focus({preventScroll:true});
 });
 
@@ -363,8 +377,10 @@ async function exportImage(){
   // medidas
   const M=48,SAFE_TOP=220,SAFE_BOTTOM=240,labW=200,gap=12,area=W-2*M-labW-gap*2;
   ctx.font=`800 64px ${css("--display")}`;
-  const tl=wrapLines(ctx,state.album||"Mi álbum",W-2*M).slice(0,2);
-  const headH=tl.length*70+(state.artist?58:0)+40;
+  const COV=coverImg?160:0,textW=W-2*M-(COV?COV+28:0);
+  const tl=wrapLines(ctx,state.album||"Mi álbum",textW).slice(0,2);
+  const textH=tl.length*70+(state.artist?58:0);
+  const headH=Math.max(textH,COV)+40;
   const counts=TIERS.map((_,i)=>state.tracks.filter(t=>t.tier===i).length);
   const rowsH=(cols,tileH)=>counts.reduce((s,n)=>{const l=Math.max(1,Math.ceil(n/cols));return s+l*tileH+(l-1)*8+24},0)+gap*(TIERS.length-1);
   const room=H-SAFE_TOP-SAFE_BOTTOM-headH;
@@ -376,9 +392,11 @@ async function exportImage(){
   let y=SAFE_TOP+Math.max(0,(H-SAFE_TOP-SAFE_BOTTOM-blockH)/2);
   // encabezado
   ctx.textBaseline="alphabetic";ctx.fillStyle=css("--fg");ctx.font=`800 64px ${css("--display")}`;
-  y+=56;tl.forEach((l,i)=>{ctx.fillText(l,M,y);if(i<tl.length-1)y+=70});
+  const headTop=y,textTop=y+Math.max(0,(COV-textH)/2);
+  if(COV){ctx.save();ctx.beginPath();ctx.roundRect(W-M-COV,headTop,COV,COV,22);ctx.clip();ctx.drawImage(coverImg,W-M-COV,headTop,COV,COV);ctx.restore()}
+  y=textTop+56;tl.forEach((l,i)=>{ctx.fillText(l,M,y);if(i<tl.length-1)y+=70});
   if(state.artist){y+=58;ctx.fillStyle=css("--muted");ctx.font=`600 34px ${css("--body")}`;ctx.fillText(state.artist,M,y)}
-  y+=40;
+  y=headTop+headH;
   const tileW=(area-(cols-1)*8)/cols;
   TIERS.forEach((tr,i)=>{
     const items=state.tracks.filter(t=>t.tier===i);
