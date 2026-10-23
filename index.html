@@ -360,24 +360,25 @@ async function exportImage(){
   const W=1080,H=1920,c=document.createElement("canvas");c.width=W;c.height=H;
   const ctx=c.getContext("2d");
   ctx.fillStyle=css("--bg");ctx.fillRect(0,0,W,H);
-  // encabezado
-  const M=48;let y=150;
-  ctx.fillStyle=css("--fg");ctx.font=`800 64px ${css("--display")}`;ctx.textBaseline="alphabetic";
+  // medidas
+  const M=48,SAFE_TOP=220,SAFE_BOTTOM=240,labW=200,gap=12,area=W-2*M-labW-gap*2;
+  ctx.font=`800 64px ${css("--display")}`;
   const tl=wrapLines(ctx,state.album||"Mi álbum",W-2*M).slice(0,2);
-  tl.forEach(l=>{ctx.fillText(l,M,y);y+=70});
-  ctx.fillStyle=css("--muted");ctx.font=`600 34px ${css("--body")}`;
-  if(state.artist){ctx.fillText(state.artist,M,y);y+=20}
-  y+=30;
-  // filas
-  const labW=200,gap=12,area=W-2*M-labW-gap*2,bottom=H-130;
-  let cols=4,tileH=120;
+  const headH=tl.length*70+(state.artist?58:0)+40;
   const counts=TIERS.map((_,i)=>state.tracks.filter(t=>t.tier===i).length);
-  for(;;){
-    const lines=counts.map(n=>Math.max(1,Math.ceil(n/cols)));
-    const total=lines.reduce((s,l)=>s+l*tileH+(l-1)*8+24,0)+gap*(TIERS.length-1);
-    if(y+total<=bottom||tileH<=60){break}
-    if(cols<5)cols++;else tileH-=8;
-  }
+  const rowsH=(cols,tileH)=>counts.reduce((s,n)=>{const l=Math.max(1,Math.ceil(n/cols));return s+l*tileH+(l-1)*8+24},0)+gap*(TIERS.length-1);
+  const room=H-SAFE_TOP-SAFE_BOTTOM-headH;
+  let cols=5,tileH=60;
+  let bestA=0;
+  for(let k=3;k<=5;k++){const w=(area-(k-1)*8)/k;
+    for(let h=Math.round(Math.min(170,w*.7));h>=60;h-=4){if(rowsH(k,h)<=room){if(w*h>bestA){bestA=w*h;cols=k;tileH=h}break}}}
+  const blockH=headH+rowsH(cols,tileH);
+  let y=SAFE_TOP+Math.max(0,(H-SAFE_TOP-SAFE_BOTTOM-blockH)/2);
+  // encabezado
+  ctx.textBaseline="alphabetic";ctx.fillStyle=css("--fg");ctx.font=`800 64px ${css("--display")}`;
+  y+=56;tl.forEach((l,i)=>{ctx.fillText(l,M,y);if(i<tl.length-1)y+=70});
+  if(state.artist){y+=58;ctx.fillStyle=css("--muted");ctx.font=`600 34px ${css("--body")}`;ctx.fillText(state.artist,M,y)}
+  y+=40;
   const tileW=(area-(cols-1)*8)/cols;
   TIERS.forEach((tr,i)=>{
     const items=state.tracks.filter(t=>t.tier===i);
@@ -391,7 +392,7 @@ async function exportImage(){
       const cx=M+labW+gap+(k%cols)*(tileW+8),cy=y+12+Math.floor(k/cols)*(tileH+8);
       ctx.fillStyle=css("--tile");rr(ctx,cx,cy,tileW,tileH,20);
       ctx.fillStyle=css("--tile-fg");
-      let fs=30,ls;
+      let fs=Math.min(40,Math.round(tileH/4)),ls;
       do{ctx.font=`700 ${fs}px ${css("--body")}`;ls=wrapLines(ctx,t.title,tileW-20);fs-=2}
       while((ls.length*fs*1.15>tileH-16||ls.some(l=>ctx.measureText(l).width>tileW-16))&&fs>14);
       const lh=(fs+2)*1.15,sy=cy+tileH/2-(ls.length-1)*lh/2;
@@ -401,7 +402,7 @@ async function exportImage(){
     y+=rowH+gap;
   });
   ctx.fillStyle=css("--muted");ctx.font=`600 30px ${css("--body")}`;ctx.textAlign="center";
-  ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-70);
+  ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-110);
   return c;
 }
 let lastBlob=null;
