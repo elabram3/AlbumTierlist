@@ -38,6 +38,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,.tile:focus-visi
 .results{display:flex;flex-direction:column;gap:6px}
 .result{display:flex;gap:10px;align-items:center;background:var(--panel);border-radius:12px;padding:8px;text-align:left;color:var(--fg);font-weight:600}
 .result img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--row)}
+.sec{margin:8px 0 2px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:700}
+.back{align-self:flex-start;background:transparent;color:var(--muted);padding:4px 0;font-weight:600}
 .result small{display:block;color:var(--muted);font-weight:400}
 details{background:var(--panel);border-radius:12px;padding:10px 14px}
 summary{cursor:pointer;font-weight:700}
@@ -203,29 +207,61 @@ async function itunes(params){
   return jsonp(url);
 }
 function msg(html){const m=$("searchMsg");m.hidden=!html;m.innerHTML=html||""}
+function clean(n){return n.replace(/ - (EP|Single)$/i,"")}
+function isFull(a){return a.trackCount>3&&!/ - Single$/i.test(a.collectionName)}
+function sec(text){const h=document.createElement("div");h.className="sec";h.textContent=text;$("results").appendChild(h)}
+function albumBtn(a){
+  const b=document.createElement("button");b.type="button";b.className="result";
+  const img=document.createElement("img");img.src=a.artworkUrl100;img.alt="";
+  const t=document.createElement("div");t.textContent=clean(a.collectionName);
+  const s=document.createElement("small");
+  const yr=a.releaseDate?new Date(a.releaseDate).getFullYear():"";
+  s.textContent=`${a.artistName} · ${yr} · ${a.trackCount} canciones`;t.appendChild(s);
+  b.append(img,t);b.addEventListener("click",()=>pickAlbum(a));
+  $("results").appendChild(b);
+}
+let lastSearch=null;
+async function showArtist(ar){
+  $("results").innerHTML="";msg("Cargando discografía…");
+  try{
+    const d=await itunes(`lookup?id=${ar.artistId}&entity=album&limit=200&country=MX`);
+    const all=d.results.filter(x=>x.wrapperType==="collection");
+    const full=all.filter(isFull);
+    const list=(full.length?full:all).sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate));
+    msg(list.length?"":"Este artista no tiene álbumes disponibles.");
+    const back=document.createElement("button");back.type="button";back.className="back";back.textContent="← Volver a resultados";
+    back.addEventListener("click",()=>lastSearch&&renderSearch(lastSearch));
+    $("results").appendChild(back);
+    sec(`Discografía de ${ar.artistName}`);
+    list.forEach(albumBtn);
+  }catch(e){msg("No pude cargar la discografía.")}
+}
+function renderSearch({artists,albums}){
+  $("results").innerHTML="";
+  if(!artists.length&&!albums.length){msg("No encontré nada. Revisa cómo está escrito.");return}
+  msg("");
+  if(artists.length){
+    sec("Artistas");
+    const c=document.createElement("div");c.className="chips";
+    artists.forEach(ar=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=ar.artistName;b.addEventListener("click",()=>showArtist(ar));c.appendChild(b)});
+    $("results").appendChild(c);
+  }
+  if(albums.length){sec("Álbumes");albums.forEach(albumBtn)}
+}
 $("searchForm").addEventListener("submit",async e=>{
   e.preventDefault();
   const q=$("q").value.trim();if(!q)return;
   $("results").innerHTML="";msg("Buscando…");
   try{
-    const d=await itunes(`search?term=${encodeURIComponent(q)}&entity=album&limit=100&country=MX`);
-    const all=d.results.filter(a=>a.collectionId);
-    const full=all.filter(a=>a.trackCount>3&&!/ - Single$/i.test(a.collectionName));
-    const list=(full.length?full:all)
-      .sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate))
-      .slice(0,12);
-    msg(list.length?"":"No encontré ese álbum. Prueba con el nombre del artista.");
-    list.forEach(a=>{
-      const b=document.createElement("button");b.type="button";b.className="result";
-      const img=document.createElement("img");img.src=a.artworkUrl100;img.alt="";
-      const t=document.createElement("div");t.textContent=a.collectionName.replace(/ - (EP|Single)$/i,"");
-      const s=document.createElement("small");
-      const yr=a.releaseDate?new Date(a.releaseDate).getFullYear():"";
-      s.textContent=`${a.artistName} · ${yr} · ${a.trackCount} canciones`;t.appendChild(s);
-      b.append(img,t);
-      b.addEventListener("click",()=>pickAlbum(a));
-      $("results").appendChild(b);
-    });
+    const term=encodeURIComponent(q);
+    const [ar,al]=await Promise.all([
+      itunes(`search?term=${term}&entity=musicArtist&limit=4&country=MX`),
+      itunes(`search?term=${term}&entity=album&limit=60&country=MX`)
+    ]);
+    const all=al.results.filter(a=>a.collectionId);
+    const full=all.filter(isFull);
+    lastSearch={artists:ar.results.filter(a=>a.artistId),albums:(full.length?full:all).slice(0,8)};
+    renderSearch(lastSearch);
   }catch(err){
     msg("<b>La búsqueda no está disponible en esta vista previa.</b> Funciona cuando la app se publica en su propio sitio. Mientras, usa “Escribir las canciones a mano”.");
     $("manual").open=true;
@@ -238,7 +274,7 @@ async function pickAlbum(a){
     const songs=d.results.filter(x=>x.wrapperType==="track")
       .sort((x,y)=>(x.discNumber-y.discNumber)||(x.trackNumber-y.trackNumber))
       .map(x=>x.trackName);
-    msg("");setAlbum(a.collectionName.replace(/ - (EP|Single)$/i,""),a.artistName,songs);
+    msg("");setAlbum(clean(a.collectionName),a.artistName,songs);
   }catch(e){msg("No pude cargar las canciones de ese álbum.")}
 }
 
