@@ -209,6 +209,15 @@ async function itunes(params){
 function msg(html){const m=$("searchMsg");m.hidden=!html;m.innerHTML=html||""}
 function clean(n){return n.replace(/ - (EP|Single)$/i,"")}
 function isFull(a){return a.trackCount>3&&!/ - Single$/i.test(a.collectionName)}
+const JUNK=/karaoke|tribute|lullab|rockabye|renditions?\b|covers?\b|instrumental|bass boosted|made famous|in the style of|originally performed|as performed|8d audio|slowed|sped up|lo-?fi|piano version|reggae version|ringtone|workout|relax|for babies|for kids|twinkle|cover band|party hits|versiones?\b|homenaje|estilo de|\((reggae|cumbia|bachata|chill|piano|guitar|guitarra|lullaby)[^)]*\)/i;
+const JUNK_GENRE=/karaoke|children|kids|fitness|easy listening|holiday/i;
+function legit(x){
+  const txt=`${x.collectionName||""} ${x.artistName||""}`;
+  if(JUNK.test(txt))return false;
+  if(JUNK_GENRE.test(x.primaryGenreName||""))return false;
+  if(/^various artists$/i.test(x.artistName||""))return false;
+  return true;
+}
 function sec(text){const h=document.createElement("div");h.className="sec";h.textContent=text;$("results").appendChild(h)}
 function albumBtn(a){
   const b=document.createElement("button");b.type="button";b.className="result";
@@ -229,11 +238,8 @@ async function showArtist(ar){
       const d=await itunes(`lookup?id=${ar.artistId}&entity=album&limit=200&country=MX`);
       all=d.results.filter(x=>x.wrapperType==="collection");
     }catch(e){}
-    if(!all.length){
-      const name=ar.artistName.toLowerCase();
-      const d2=await itunes(`search?term=${encodeURIComponent(ar.artistName)}&entity=album&attribute=artistTerm&limit=200&country=MX`);
-      all=d2.results.filter(x=>x.collectionId&&(x.artistId===ar.artistId||(x.artistName||"").toLowerCase().includes(name)));
-    }
+    if(!all.length&&lastSearch)all=lastSearch.byArtist.filter(x=>x.artistId===ar.artistId);
+    all=all.filter(legit);
     const seen=new Set();all=all.filter(x=>!seen.has(x.collectionId)&&seen.add(x.collectionId));
     const full=all.filter(isFull);
     const list=(full.length?full:all).sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate));
@@ -263,13 +269,20 @@ $("searchForm").addEventListener("submit",async e=>{
   $("results").innerHTML="";msg("Buscando…");
   try{
     const term=encodeURIComponent(q);
-    const [ar,al]=await Promise.all([
-      itunes(`search?term=${term}&entity=musicArtist&limit=4&country=MX`),
-      itunes(`search?term=${term}&entity=album&limit=60&country=MX`)
+    const [ar,al,by]=await Promise.all([
+      itunes(`search?term=${term}&entity=musicArtist&limit=15&country=MX`),
+      itunes(`search?term=${term}&entity=album&limit=80&country=MX`),
+      itunes(`search?term=${term}&entity=album&attribute=artistTerm&limit=200&country=MX`)
     ]);
-    const all=al.results.filter(a=>a.collectionId);
+    const byArtist=by.results.filter(x=>x.collectionId&&legit(x));
+    const count={};byArtist.filter(isFull).forEach(x=>count[x.artistId]=(count[x.artistId]||0)+1);
+    const best={};
+    ar.results.filter(x=>x.artistId&&!JUNK.test(x.artistName)&&!JUNK_GENRE.test(x.primaryGenreName||"")&&count[x.artistId])
+      .forEach((x,i)=>{const k=x.artistName.toLowerCase().trim();if(!best[k]||count[x.artistId]>count[best[k].artistId])best[k]={...x,_i:best[k]?best[k]._i:i}});
+    const artists=Object.values(best).sort((x,y)=>x._i-y._i).slice(0,4);
+    const all=al.results.filter(x=>x.collectionId&&legit(x));
     const full=all.filter(isFull);
-    lastSearch={artists:ar.results.filter(a=>a.artistId),albums:(full.length?full:all).slice(0,8)};
+    lastSearch={artists,byArtist,albums:(full.length?full:all).slice(0,8)};
     renderSearch(lastSearch);
   }catch(err){
     msg("<b>La búsqueda no está disponible en esta vista previa.</b> Funciona cuando la app se publica en su propio sitio. Mientras, usa “Escribir las canciones a mano”.");
