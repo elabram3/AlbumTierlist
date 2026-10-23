@@ -73,7 +73,9 @@ textarea{width:100%;box-sizing:border-box;min-height:140px;margin-top:10px;backg
 
 /* acciones */
 .actions{display:flex;gap:8px;flex-wrap:wrap}
-.actions button{flex:1}
+.actions button{flex:1 1 140px}
+button.danger{color:#ff6b6b;border-color:#5a2a2e}
+button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .preview{display:flex;flex-direction:column;gap:10px;align-items:center}
 .preview img{width:100%;max-width:360px;border-radius:14px;border:1px solid var(--line)}
 .preview p{margin:0;color:var(--muted);font-size:13px;text-align:center}
@@ -90,7 +92,7 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
   </header>
 
   <form class="search" id="searchForm">
-    <input id="q" type="search" placeholder="Artista o álbum, ej. nsqk" autocomplete="off">
+    <input id="q" type="search" placeholder="Artista o álbum" autocomplete="off">
     <button type="submit">Buscar</button>
   </form>
   <div id="searchMsg" class="note" hidden></div>
@@ -123,7 +125,8 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
 
   <div class="actions">
     <button type="button" id="exportBtn">Crear imagen para historia</button>
-    <button type="button" class="ghost" id="resetBtn">Reiniciar</button>
+    <button type="button" class="ghost" id="resetBtn">Desacomodar</button>
+    <button type="button" class="ghost danger" id="clearBtn">Borrar todo</button>
   </div>
   <div class="preview" id="preview" hidden>
     <img id="previewImg" alt="Tu tierlist lista para historia">
@@ -295,6 +298,19 @@ $("mLoad").addEventListener("click",()=>{
   $("manual").open=false;
 });
 $("resetBtn").addEventListener("click",()=>{state.tracks.forEach(t=>t.tier=-1);selected=null;render()});
+let clearTimer=null;
+$("clearBtn").addEventListener("click",()=>{
+  const b=$("clearBtn");
+  if(!b.classList.contains("confirm")){
+    b.classList.add("confirm");b.textContent="¿Seguro? Toca otra vez";
+    clearTimer=setTimeout(()=>{b.classList.remove("confirm");b.textContent="Borrar todo"},3000);
+    return;
+  }
+  clearTimeout(clearTimer);b.classList.remove("confirm");b.textContent="Borrar todo";
+  state={album:"",artist:"",tracks:[]};selected=null;lastSearch=null;lastBlob=null;
+  $("q").value="";$("results").innerHTML="";msg("");$("preview").hidden=true;
+  render();window.scrollTo({top:0,behavior:"smooth"});$("q").focus({preventScroll:true});
+});
 
 // ===== imagen 1080x1920 =====
 function wrapLines(ctx,text,maxW){
