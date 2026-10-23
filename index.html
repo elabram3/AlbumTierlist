@@ -135,20 +135,15 @@ const TIERS=[
   {label:"Mid 🟰",color:"--t4"},
   {label:"Skip ⏭️",color:"--t5"}
 ];
-const EXAMPLE={album:"Ejemplo (nsqk)",artist:"nsqk",
-  tracks:["MARGOT","Ghost In The Shell","Hombre de Bien","SANGRE!","Qué Tan Cerca Es Cerca","Basta Con Querernos","tuffluv","Peces Muertos","Circo","Estar Así Siempre","Santurce","Atrapado y Libre","Lo Tuvimos Pero Ya No","Mil Problemas","Canonizado","Dientes de Fierro","SAMSA"],
-  place:[0,0,1,1,1,1,1,1,2,2,2,2,2,3,3,4,4]};
 let state={album:"",artist:"",tracks:[]};
 let selected=null;
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const $=id=>document.getElementById(id);
 
-// ===== guardado local =====
-function save(){try{localStorage.setItem("tierlist",JSON.stringify(state))}catch(e){}}
-function load(){try{const s=JSON.parse(localStorage.getItem("tierlist"));if(s&&s.tracks&&s.tracks.length)return s}catch(e){}return null}
+// ===== álbum =====
 function setAlbum(album,artist,titles,place){
   state={album,artist,tracks:titles.map((t,i)=>({id:i,title:t,tier:place?place[i]:-1}))};
-  selected=null;$("preview").hidden=true;save();render();
+  selected=null;$("preview").hidden=true;render();
 }
 
 // ===== tablero =====
@@ -164,10 +159,10 @@ function tileEl(t){
 function place(tier){
   if(selected===null)return;
   const t=state.tracks.find(x=>x.id===selected);
-  if(t){t.tier=tier;selected=null;save();render()}
+  if(t){t.tier=tier;selected=null;render()}
 }
 function render(){
-  $("albumTitle").textContent=state.album||"Sin álbum";
+  $("albumTitle").textContent=state.album||"Elige un álbum";
   $("albumArtist").textContent=state.artist||"";
   const board=$("board");board.innerHTML="";
   TIERS.forEach((tr,i)=>{
@@ -184,7 +179,7 @@ function render(){
   });
   const bank=$("bankCells");bank.innerHTML="";
   const rest=state.tracks.filter(t=>t.tier===-1);
-  if(!rest.length){const e=document.createElement("div");e.className="empty";e.textContent="Todas acomodadas. Toca una para moverla.";bank.appendChild(e)}
+  if(!rest.length){const e=document.createElement("div");e.className="empty";e.textContent=state.tracks.length?"Todas acomodadas. Toca una para moverla.":"Busca un álbum arriba para empezar.";bank.appendChild(e)}
   rest.forEach(t=>bank.appendChild(tileEl(t)));
   $("bank").classList.toggle("armed",selected!==null);
 }
@@ -247,7 +242,7 @@ $("mLoad").addEventListener("click",()=>{
   setAlbum($("mAlbum").value.trim()||"Mi álbum",$("mArtist").value.trim(),titles);
   $("manual").open=false;
 });
-$("resetBtn").addEventListener("click",()=>{state.tracks.forEach(t=>t.tier=-1);selected=null;save();render()});
+$("resetBtn").addEventListener("click",()=>{state.tracks.forEach(t=>t.tier=-1);selected=null;render()});
 
 // ===== imagen 1080x1920 =====
 function wrapLines(ctx,text,maxW){
@@ -324,8 +319,7 @@ $("saveBtn").addEventListener("click",async()=>{
 });
 
 // ===== inicio =====
-const saved=load();
-if(saved){state=saved;render()}else setAlbum(EXAMPLE.album,EXAMPLE.artist,EXAMPLE.tracks,EXAMPLE.place);
+render();
 </script>
 
 </body>
