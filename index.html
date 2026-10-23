@@ -208,13 +208,20 @@ $("searchForm").addEventListener("submit",async e=>{
   const q=$("q").value.trim();if(!q)return;
   $("results").innerHTML="";msg("Buscando…");
   try{
-    const d=await itunes(`search?term=${encodeURIComponent(q)}&entity=album&limit=8&country=MX`);
-    msg(d.results.length?"":"No encontré ese álbum. Prueba con el nombre del artista.");
-    d.results.forEach(a=>{
+    const d=await itunes(`search?term=${encodeURIComponent(q)}&entity=album&limit=100&country=MX`);
+    const all=d.results.filter(a=>a.collectionId);
+    const full=all.filter(a=>a.trackCount>3&&!/ - Single$/i.test(a.collectionName));
+    const list=(full.length?full:all)
+      .sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate))
+      .slice(0,12);
+    msg(list.length?"":"No encontré ese álbum. Prueba con el nombre del artista.");
+    list.forEach(a=>{
       const b=document.createElement("button");b.type="button";b.className="result";
       const img=document.createElement("img");img.src=a.artworkUrl100;img.alt="";
-      const t=document.createElement("div");t.textContent=a.collectionName;
-      const s=document.createElement("small");s.textContent=a.artistName;t.appendChild(s);
+      const t=document.createElement("div");t.textContent=a.collectionName.replace(/ - (EP|Single)$/i,"");
+      const s=document.createElement("small");
+      const yr=a.releaseDate?new Date(a.releaseDate).getFullYear():"";
+      s.textContent=`${a.artistName} · ${yr} · ${a.trackCount} canciones`;t.appendChild(s);
       b.append(img,t);
       b.addEventListener("click",()=>pickAlbum(a));
       $("results").appendChild(b);
@@ -231,7 +238,7 @@ async function pickAlbum(a){
     const songs=d.results.filter(x=>x.wrapperType==="track")
       .sort((x,y)=>(x.discNumber-y.discNumber)||(x.trackNumber-y.trackNumber))
       .map(x=>x.trackName);
-    msg("");setAlbum(a.collectionName,a.artistName,songs);
+    msg("");setAlbum(a.collectionName.replace(/ - (EP|Single)$/i,""),a.artistName,songs);
   }catch(e){msg("No pude cargar las canciones de ese álbum.")}
 }
 
