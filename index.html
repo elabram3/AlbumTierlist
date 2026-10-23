@@ -40,7 +40,9 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,.tile:focus-visi
 .result img{width:48px;height:48px;border-radius:8px;object-fit:cover;background:var(--row)}
 .sec{margin:8px 0 2px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
 .chips{display:flex;gap:6px;flex-wrap:wrap}
-.chip{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:700}
+.chip{display:flex;align-items:center;gap:8px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:6px 14px 6px 6px;font-weight:700}
+.chip img{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--row)}
+.chip small{color:var(--muted);font-weight:600;font-size:12px}
 .back{align-self:flex-start;background:transparent;color:var(--muted);padding:4px 0;font-weight:600}
 .result small{display:block;color:var(--muted);font-weight:400}
 details{background:var(--panel);border-radius:12px;padding:10px 14px}
@@ -189,79 +191,71 @@ function render(){
 }
 $("bank").addEventListener("click",()=>place(-1));
 
-// ===== búsqueda (iTunes) =====
+// ===== búsqueda (Deezer) =====
+const MIN_FANS=10000;
 function jsonp(url){
   return new Promise((res,rej)=>{
     const cb="cb"+Math.random().toString(36).slice(2);
     const s=document.createElement("script");
-    const timer=setTimeout(()=>{cleanup();rej(new Error("timeout"))},6000);
+    const timer=setTimeout(()=>{cleanup();rej(new Error("timeout"))},8000);
     function cleanup(){clearTimeout(timer);delete window[cb];s.remove()}
-    window[cb]=d=>{cleanup();res(d)};
+    window[cb]=d=>{cleanup();d&&d.error?rej(new Error(d.error.message||"api")):res(d)};
     s.onerror=()=>{cleanup();rej(new Error("blocked"))};
-    s.src=url+"&callback="+cb;document.head.appendChild(s);
+    s.src=url+(url.includes("?")?"&":"?")+"output=jsonp&callback="+cb;
+    document.head.appendChild(s);
   });
 }
-async function itunes(params){
-  const url="https://itunes.apple.com/"+params;
-  try{const r=await fetch(url);if(r.ok)return await r.json()}catch(e){}
-  return jsonp(url);
-}
-function msg(html){const m=$("searchMsg");m.hidden=!html;m.innerHTML=html||""}
-function clean(n){return n.replace(/ - (EP|Single)$/i,"")}
-function isFull(a){return a.trackCount>3&&!/ - Single$/i.test(a.collectionName)}
+const dz=path=>jsonp("https://api.deezer.com/"+path);
 const JUNK=/karaoke|tribute|lullab|rockabye|renditions?\b|covers?\b|instrumental|bass boosted|made famous|in the style of|originally performed|as performed|8d audio|slowed|sped up|lo-?fi|piano version|reggae version|ringtone|workout|relax|for babies|for kids|twinkle|cover band|party hits|versiones?\b|homenaje|estilo de|\((reggae|cumbia|bachata|chill|piano|guitar|guitarra|lullaby)[^)]*\)/i;
-const JUNK_GENRE=/karaoke|children|kids|fitness|easy listening|holiday/i;
-function legit(x){
-  const txt=`${x.collectionName||""} ${x.artistName||""}`;
-  if(JUNK.test(txt))return false;
-  if(JUNK_GENRE.test(x.primaryGenreName||""))return false;
-  if(/^various artists$/i.test(x.artistName||""))return false;
-  return true;
-}
+const OK_TYPE=t=>t==="album"||t==="ep";
+function fans(n){return n>=1e6?(n/1e6).toFixed(1).replace(".0","")+" M fans":n>=1e3?Math.round(n/1e3)+" mil fans":n+" fans"}
+function year(d){return d?String(d).slice(0,4):""}
+function msg(html){const m=$("searchMsg");m.hidden=!html;m.innerHTML=html||""}
 function sec(text){const h=document.createElement("div");h.className="sec";h.textContent=text;$("results").appendChild(h)}
-function albumBtn(a){
+function albumBtn(a,artistName){
   const b=document.createElement("button");b.type="button";b.className="result";
-  const img=document.createElement("img");img.src=a.artworkUrl100;img.alt="";
-  const t=document.createElement("div");t.textContent=clean(a.collectionName);
+  const img=document.createElement("img");img.src=a.cover_medium||"";img.alt="";
+  const t=document.createElement("div");t.textContent=a.title;
   const s=document.createElement("small");
-  const yr=a.releaseDate?new Date(a.releaseDate).getFullYear():"";
-  s.textContent=`${a.artistName} · ${yr} · ${a.trackCount} canciones`;t.appendChild(s);
-  b.append(img,t);b.addEventListener("click",()=>pickAlbum(a));
+  const parts=[artistName||(a.artist&&a.artist.name)||"",year(a.release_date),a.nb_tracks?a.nb_tracks+" canciones":(a.record_type==="ep"?"EP":"")].filter(Boolean);
+  s.textContent=parts.join(" · ");t.appendChild(s);
+  b.append(img,t);b.addEventListener("click",()=>pickAlbum(a,artistName));
   $("results").appendChild(b);
 }
 let lastSearch=null;
 async function showArtist(ar){
   $("results").innerHTML="";msg("Cargando discografía…");
   try{
-    let all=[];
-    try{
-      const d=await itunes(`lookup?id=${ar.artistId}&entity=album&limit=200&country=MX`);
-      all=d.results.filter(x=>x.wrapperType==="collection");
-    }catch(e){}
-    if(!all.length&&lastSearch)all=lastSearch.byArtist.filter(x=>x.artistId===ar.artistId);
-    all=all.filter(legit);
-    const seen=new Set();all=all.filter(x=>!seen.has(x.collectionId)&&seen.add(x.collectionId));
-    const full=all.filter(isFull);
-    const list=(full.length?full:all).sort((x,y)=>new Date(y.releaseDate)-new Date(x.releaseDate));
+    const d=await dz(`artist/${ar.id}/albums?limit=200`);
+    const seen=new Set();
+    const list=(d.data||[]).filter(x=>OK_TYPE(x.record_type)&&!JUNK.test(x.title))
+      .filter(x=>{const k=x.title.toLowerCase();if(seen.has(k))return false;seen.add(k);return true})
+      .sort((x,y)=>String(y.release_date).localeCompare(String(x.release_date)));
     msg(list.length?"":"Este artista no tiene álbumes disponibles.");
     const back=document.createElement("button");back.type="button";back.className="back";back.textContent="← Volver a resultados";
     back.addEventListener("click",()=>lastSearch&&renderSearch(lastSearch));
     $("results").appendChild(back);
-    sec(`Discografía de ${ar.artistName}`);
-    list.forEach(albumBtn);
-  }catch(e){msg("No pude cargar la discografía.")}
+    sec(`Discografía de ${ar.name}`);
+    list.forEach(x=>albumBtn(x,ar.name));
+  }catch(e){msg("No pude cargar la discografía. Intenta de nuevo.")}
 }
 function renderSearch({artists,albums}){
   $("results").innerHTML="";
-  if(!artists.length&&!albums.length){msg("No encontré nada. Revisa cómo está escrito.");return}
+  if(!artists.length&&!albums.length){msg("No encontré artistas o álbumes conocidos con ese nombre.");return}
   msg("");
   if(artists.length){
     sec("Artistas");
     const c=document.createElement("div");c.className="chips";
-    artists.forEach(ar=>{const b=document.createElement("button");b.type="button";b.className="chip";b.textContent=ar.artistName;b.addEventListener("click",()=>showArtist(ar));c.appendChild(b)});
+    artists.forEach(ar=>{
+      const b=document.createElement("button");b.type="button";b.className="chip";
+      const img=document.createElement("img");img.src=ar.picture_small||"";img.alt="";
+      const n=document.createElement("span");n.textContent=ar.name;
+      const f=document.createElement("small");f.textContent=fans(ar.nb_fan);
+      b.append(img,n,f);b.addEventListener("click",()=>showArtist(ar));c.appendChild(b);
+    });
     $("results").appendChild(c);
   }
-  if(albums.length){sec("Álbumes");albums.forEach(albumBtn)}
+  if(albums.length){sec("Álbumes");albums.forEach(x=>albumBtn(x))}
 }
 $("searchForm").addEventListener("submit",async e=>{
   e.preventDefault();
@@ -269,34 +263,27 @@ $("searchForm").addEventListener("submit",async e=>{
   $("results").innerHTML="";msg("Buscando…");
   try{
     const term=encodeURIComponent(q);
-    const [ar,al,by]=await Promise.all([
-      itunes(`search?term=${term}&entity=musicArtist&limit=15&country=MX`),
-      itunes(`search?term=${term}&entity=album&limit=80&country=MX`),
-      itunes(`search?term=${term}&entity=album&attribute=artistTerm&limit=200&country=MX`)
-    ]);
-    const byArtist=by.results.filter(x=>x.collectionId&&legit(x));
-    const count={};byArtist.filter(isFull).forEach(x=>count[x.artistId]=(count[x.artistId]||0)+1);
-    const best={};
-    ar.results.filter(x=>x.artistId&&!JUNK.test(x.artistName)&&!JUNK_GENRE.test(x.primaryGenreName||"")&&count[x.artistId])
-      .forEach((x,i)=>{const k=x.artistName.toLowerCase().trim();if(!best[k]||count[x.artistId]>count[best[k].artistId])best[k]={...x,_i:best[k]?best[k]._i:i}});
-    const artists=Object.values(best).sort((x,y)=>x._i-y._i).slice(0,4);
-    const all=al.results.filter(x=>x.collectionId&&legit(x));
-    const full=all.filter(isFull);
-    lastSearch={artists,byArtist,albums:(full.length?full:all).slice(0,8)};
+    const [ar,al]=await Promise.all([dz(`search/artist?q=${term}&limit=10`),dz(`search/album?q=${term}&limit=25`)]);
+    const artists=(ar.data||[]).filter(x=>x.nb_fan>=MIN_FANS&&!JUNK.test(x.name)).slice(0,4);
+    let albums=(al.data||[]).filter(x=>OK_TYPE(x.record_type)&&x.nb_tracks>3&&!JUNK.test(x.title)&&!JUNK.test(x.artist.name));
+    const ids=[...new Set(albums.map(x=>x.artist.id))].slice(0,10);
+    const known={};artists.forEach(x=>known[x.id]=x.nb_fan);
+    const info=await Promise.all(ids.filter(id=>!(id in known)).map(id=>dz(`artist/${id}`).catch(()=>null)));
+    info.forEach(x=>{if(x)known[x.id]=x.nb_fan||0});
+    albums=albums.filter(x=>(known[x.artist.id]||0)>=MIN_FANS).slice(0,8);
+    lastSearch={artists,albums};
     renderSearch(lastSearch);
   }catch(err){
-    msg("<b>La búsqueda no está disponible en esta vista previa.</b> Funciona cuando la app se publica en su propio sitio. Mientras, usa “Escribir las canciones a mano”.");
-    $("manual").open=true;
+    msg("<b>La búsqueda no respondió.</b> Revisa tu conexión e intenta de nuevo, o usa “Escribir las canciones a mano”.");
   }
 });
-async function pickAlbum(a){
+async function pickAlbum(a,artistName){
   msg("Cargando canciones…");$("results").innerHTML="";
   try{
-    const d=await itunes(`lookup?id=${a.collectionId}&entity=song&country=MX`);
-    const songs=d.results.filter(x=>x.wrapperType==="track")
-      .sort((x,y)=>(x.discNumber-y.discNumber)||(x.trackNumber-y.trackNumber))
-      .map(x=>x.trackName);
-    msg("");setAlbum(clean(a.collectionName),a.artistName,songs);
+    const d=await dz(`album/${a.id}/tracks?limit=200`);
+    const songs=(d.data||[]).map(x=>x.title);
+    if(!songs.length)throw new Error("empty");
+    msg("");setAlbum(a.title,artistName||(a.artist&&a.artist.name)||"",songs);
   }catch(e){msg("No pude cargar las canciones de ese álbum.")}
 }
 
