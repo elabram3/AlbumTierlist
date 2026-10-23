@@ -404,8 +404,16 @@ async function exportImage(){
     const rowH=lines*tileH+(lines-1)*8+24;
     ctx.fillStyle=css("--row");rr(ctx,M,y,W-2*M,rowH,28);
     ctx.fillStyle=css(tr.color);rr(ctx,M,y,labW,rowH,28);
-    ctx.fillStyle="#1a1a1a";ctx.font=`800 46px ${css("--display")}`;ctx.textAlign="center";ctx.textBaseline="middle";
-    ctx.fillText(tr.label,M+labW/2,y+rowH/2);
+    ctx.fillStyle="#1a1a1a";ctx.textAlign="center";ctx.textBaseline="middle";
+    const maxLW=labW-28;let lfs=46,lbl=[tr.label];
+    const fits=()=>lbl.every(l=>ctx.measureText(l).width<=maxLW);
+    for(;lfs>=32;lfs-=2){ctx.font=`800 ${lfs}px ${css("--display")}`;if(fits())break}
+    if(!fits()&&tr.label.includes(" ")){
+      const i=tr.label.lastIndexOf(" ");lbl=[tr.label.slice(0,i),tr.label.slice(i+1)];
+      for(lfs=46;lfs>20;lfs-=2){ctx.font=`800 ${lfs}px ${css("--display")}`;if(fits())break}
+    }
+    const llh=lfs*1.15;
+    lbl.forEach((l,j)=>ctx.fillText(l,M+labW/2,y+rowH/2+(j-(lbl.length-1)/2)*llh));
     items.forEach((t,k)=>{
       const cx=M+labW+gap+(k%cols)*(tileW+8),cy=y+12+Math.floor(k/cols)*(tileH+8);
       ctx.fillStyle=css("--tile");rr(ctx,cx,cy,tileW,tileH,20);
