@@ -81,6 +81,14 @@ button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .preview{display:flex;flex-direction:column;gap:10px;align-items:center}
 .preview img{width:100%;max-width:360px;border-radius:14px;border:1px solid var(--line)}
 .preview p{margin:0;color:var(--muted);font-size:13px;text-align:center}
+.iab{background:var(--panel);border:1px solid var(--pick);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.iab p{margin:0;font-size:14px}
+.iab .iab-steps{color:var(--muted);font-size:13px}
+.iab-btn{display:block;text-align:center;background:var(--pick);color:#17171b;font-weight:700;border-radius:12px;padding:12px 16px;text-decoration:none}
+.full{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.full img{max-width:100%;max-height:calc(100% - 40px);object-fit:contain}
+.full p{margin:0;color:#9a9aa5;font-size:12px;text-align:center;padding:0 16px}
 @medi
 </head>
 <body>
@@ -92,6 +100,12 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
     <h1>Tierlist de Álbum</h1>
     <p>Busca un disco, acomoda cada canción en su fila y descárgalo para tu historia.</p>
   </header>
+
+  <div class="iab" id="iab" hidden>
+    <p><b>Estás dentro de Instagram.</b> Aquí no se puede guardar la imagen directo. Ábrela en tu navegador antes de empezar.</p>
+    <a class="iab-btn" id="iabOpen" href="#" hidden>Abrir en el navegador</a>
+    <p class="iab-steps">O toca <b>⋯</b> arriba a la derecha → <b>Abrir en navegador</b>.</p>
+  </div>
 
   <form class="search" id="searchForm">
     <input id="q" type="search" placeholder="Artista o álbum" autocomplete="off">
@@ -137,6 +151,11 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
     <img id="previewImg" alt="Tu tierlist lista para historia">
     <p id="previewMsg">Guárdala o compártela directo a tu historia.</p>
     <button type="button" id="saveBtn" hidden>Descargar PNG</button>
+    <button type="button" class="ghost" id="fullBtn">Ver en pantalla completa</button>
+  </div>
+  <div class="full" id="full" hidden>
+    <img id="fullImg" alt="Tu tierlist en pantalla completa">
+    <p>Toma captura de pantalla y súbela a tu historia. Toca para cerrar.</p>
   </div>
 </div>
 
@@ -435,13 +454,29 @@ async function exportImage(){
   return c;
 }
 let lastBlob=null;
+// ===== navegador de Instagram =====
+const UA=navigator.userAgent||"";
+const IN_IG=/Instagram|FBAN|FBAV/i.test(UA);
+const IS_ANDROID=/Android/i.test(UA);
+if(IN_IG){
+  $("iab").hidden=false;
+  if(IS_ANDROID){
+    const url=location.href.replace(/^https?:\/\//,"").split("#")[0];
+    const o=$("iabOpen");o.hidden=false;
+    o.href=`intent://${url}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
+  }
+}
+$("fullBtn").addEventListener("click",()=>{$("fullImg").src=$("previewImg").src;$("full").hidden=false});
+$("full").addEventListener("click",()=>{$("full").hidden=true});
+
 $("exportBtn").addEventListener("click",async()=>{
   const c=await exportImage();
   $("previewImg").src=c.toDataURL("image/png");$("preview").hidden=false;
   c.toBlob(b=>lastBlob=b,"image/png");
   $("preview").scrollIntoView({behavior:"smooth",block:"start"});
 });
-$("saveBtn").hidden=false;
+$("saveBtn").hidden=IN_IG;
+if(IN_IG)$("previewMsg").textContent="Dentro de Instagram usa la pantalla completa y toma captura.";
 $("saveBtn").textContent="Guardar o compartir";
 $("saveBtn").addEventListener("click",async()=>{
   if(!lastBlob)return;
