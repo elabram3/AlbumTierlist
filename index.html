@@ -95,7 +95,11 @@ button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .sheet-rows{display:flex;flex-direction:column;gap:10px}
 .sheet-row{display:flex;gap:10px;align-items:center}
 .sheet-row input[type=text]{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;font-weight:700}
-.sheet-row input[type=color]{width:48px;height:44px;flex:0 0 48px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
+.sheet-item{display:flex;flex-direction:column;gap:8px}
+.chip{width:48px;height:44px;flex:0 0 48px;border:2px solid var(--line);border-radius:10px;padding:0;cursor:pointer}
+.swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:10px;background:var(--bg);border-radius:12px}
+.sw{aspect-ratio:1;max-width:100%;border-radius:50%;border:0;padding:0;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.15)}
+.sw.on{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
 .sheet-actions{display:flex;gap:8px}
 .sheet-actions button{flex:1}
 .full{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
@@ -404,18 +408,33 @@ function colorFromCover(url){
 }
 
 // ===== personalizar filas =====
+const PALETTE=[
+  "#d81e3c","#ff2a2a","#ff6a2b","#ff9800","#ffc23d","#ffe83d",
+  "#c8e04a","#3fbf5f","#7fb24c","#d9a066","#b0703c","#7a4a2c",
+  "#33c3e8","#2196f3","#3e5ff0","#a45ee8","#ff5fa8","#9a9aa5"];
+let openSw=-1;
 function buildSheet(){
   const box=$("sheetRows");box.innerHTML="";
   TIERS.forEach((tr,i)=>{
+    const item=document.createElement("div");item.className="sheet-item";
     const r=document.createElement("div");r.className="sheet-row";
+    const chip=document.createElement("button");chip.type="button";chip.className="chip";chip.style.background=tr.color;
+    chip.setAttribute("aria-label","Color de la fila "+(i+1));
+    chip.addEventListener("click",()=>{openSw=openSw===i?-1:i;buildSheet()});
     const tx=document.createElement("input");tx.type="text";tx.id="tierText"+i;tx.value=tr.label;tx.maxLength=24;tx.setAttribute("aria-label","Texto de la fila "+(i+1));
-    const co=document.createElement("input");co.type="color";co.id="tierColor"+i;co.value=tr.color;co.setAttribute("aria-label","Color de la fila "+(i+1));
     tx.addEventListener("input",()=>{tr.label=tx.value.trim()||DEFAULT_TIERS[i].label;render()});
-    co.addEventListener("input",()=>{tr.color=co.value;render()});
-    r.append(co,tx);box.appendChild(r);
+    r.append(chip,tx);item.appendChild(r);
+    if(openSw===i){
+      const g=document.createElement("div");g.className="swatches";
+      PALETTE.forEach(c=>{const b=document.createElement("button");b.type="button";b.className="sw"+(c===tr.color?" on":"");
+        b.style.background=c;b.setAttribute("aria-label","Color "+c);
+        b.addEventListener("click",()=>{tr.color=c;openSw=-1;buildSheet();render()});g.appendChild(b)});
+      item.appendChild(g);
+    }
+    box.appendChild(item);
   });
 }
-$("customBtn").addEventListener("click",()=>{buildSheet();$("sheet").hidden=false});
+$("customBtn").addEventListener("click",()=>{openSw=-1;buildSheet();$("sheet").hidden=false});
 $("sheetDone").addEventListener("click",()=>{$("sheet").hidden=true});
 $("sheet").addEventListener("click",e=>{if(e.target===$("sheet"))$("sheet").hidden=true});
 $("sheetReset").addEventListener("click",()=>{DEFAULT_TIERS.forEach((d,i)=>Object.assign(TIERS[i],d));buildSheet();render()});
