@@ -80,7 +80,8 @@ body.dragging{user-select:none;-webkit-user-select:none}
 button.danger{color:#ff6b6b;border-color:#5a2a2e}
 button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .preview{display:flex;flex-direction:column;gap:10px;align-items:center}
-.preview img{width:100%;max-width:360px;border-radius:14px;border:1px solid var(--line)}
+.pv-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:520px}
+.preview img{width:100%;border-radius:14px;border:1px solid var(--line);cursor:zoom-in}
 .preview p{margin:0;color:var(--muted);font-size:13px;text-align:center}
 .iab{background:var(--panel);border:1px solid var(--pick);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .iab p{margin:0;font-size:14px}
@@ -133,12 +134,15 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
   </div>
 
   <div class="actions">
-    <button type="button" id="exportBtn">Crear imagen para historia</button>
+    <button type="button" id="exportBtn">Crear imágenes para historia</button>
     <button type="button" class="ghost" id="resetBtn">Desacomodar</button>
     <button type="button" class="ghost danger" id="clearBtn">Borrar todo</button>
   </div>
   <div class="preview" id="preview" hidden>
-    <img id="previewImg" alt="Tu tierlist lista para historia">
+    <div class="pv-pair">
+      <img id="previewImg" alt="Tu tierlist lista para historia">
+      <img id="previewImg2" alt="Calificación del álbum">
+    </div>
     <p id="previewMsg">Guárdala o compártela directo a tu historia.</p>
     <button type="button" id="saveBtn" hidden>Descargar PNG</button>
     <button type="button" class="ghost" id="fullBtn">Ver en pantalla completa</button>
@@ -462,7 +466,110 @@ async function exportImage(){
   ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-106);
   return c;
 }
-let lastBlob=null;
+// ===== calificación =====
+const VALS=[10,9.5,7.5,5.5];
+function scoreOf(){
+  const placed=state.tracks.filter(t=>t.tier>=0);
+  if(!placed.length)return null;
+  const skips=placed.filter(t=>t.tier===4).length;
+  const rest=placed.filter(t=>t.tier<4);
+  let real=rest.length?rest.reduce((s,t)=>s+VALS[t.tier],0)/rest.length:1;
+  real=Math.min(10,Math.max(1,real-0.75*skips));
+  let shown;
+  if(placed.every(t=>t.tier===0))shown=10;
+  else if(real>=9.45)shown=Math.min(9.9,Math.round(real*10)/10);
+  else{const i=Math.floor(real),f=Math.round((real-i)*1e6)/1e6;shown=f<0.4?i:f<=0.6?i+0.5:i+1}
+  return{real,shown};
+}
+function fmtScore(n){return Number.isInteger(n)?String(n):n.toFixed(1)}
+function flamePath(ctx,x,y,w,h){
+  const P=(a,b)=>[x+a*w,y+b*h];ctx.beginPath();
+  ctx.moveTo(...P(.5,0));
+  ctx.bezierCurveTo(...P(.62,.22),...P(.95,.38),...P(.95,.66));
+  ctx.bezierCurveTo(...P(.95,.87),...P(.75,1),...P(.5,1));
+  ctx.bezierCurveTo(...P(.25,1),...P(.05,.87),...P(.05,.66));
+  ctx.bezierCurveTo(...P(.05,.5),...P(.17,.4),...P(.26,.28));
+  ctx.bezierCurveTo(...P(.27,.42),...P(.33,.5),...P(.41,.53));
+  ctx.bezierCurveTo(...P(.37,.33),...P(.42,.14),...P(.5,0));
+  ctx.closePath();
+}
+function drawFlames(ctx,x,y,fw,fh,gap,fill){
+  for(let i=0;i<5;i++){
+    const fx=x+i*(fw+gap),part=Math.max(0,Math.min(1,fill-i));
+    ctx.save();flamePath(ctx,fx,y,fw,fh);ctx.fillStyle="rgba(255,255,255,.12)";ctx.fill();
+    if(part>0){ctx.clip();ctx.fillStyle="#ff6a2b";ctx.fillRect(fx,y,fw*part,fh)}
+    ctx.restore();
+  }
+}
+function medal(ctx,cx,cy,r,rank){
+  const C=[["#ffd54a","#c99a06"],["#e3e6ec","#9aa1ad"],["#e59a5b","#a85a22"]][rank-1];
+  ctx.fillStyle="#d8323c";ctx.beginPath();ctx.moveTo(cx-r*.75,cy-r*1.9);ctx.lineTo(cx-r*.15,cy-r*1.9);ctx.lineTo(cx+r*.15,cy-r*.6);ctx.lineTo(cx-r*.45,cy-r*.6);ctx.fill();
+  ctx.fillStyle="#2f5bd8";ctx.beginPath();ctx.moveTo(cx+r*.75,cy-r*1.9);ctx.lineTo(cx+r*.15,cy-r*1.9);ctx.lineTo(cx-r*.15,cy-r*.6);ctx.lineTo(cx+r*.45,cy-r*.6);ctx.fill();
+  ctx.fillStyle=C[1];ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=C[0];ctx.beginPath();ctx.arc(cx,cy,r*.8,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#3a2a00";ctx.font=`800 ${Math.round(r*1.05)}px ${css("--display")}`;ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.fillText(rank,cx,cy+r*.06);
+}
+async function exportScoreImage(){
+  await document.fonts.ready;
+  const sc=scoreOf();
+  const W=1080,H=1920,c=document.createElement("canvas");c.width=W;c.height=H;
+  const ctx=c.getContext("2d");ctx.fillStyle=css("--bg");ctx.fillRect(0,0,W,H);
+  const M=72;
+  const top=[...state.tracks.filter(t=>t.tier>=0)].sort((a,b)=>a.tier-b.tier).slice(0,5);
+  // alto total para centrar
+  ctx.font=`800 64px ${css("--display")}`;
+  const tl=wrapLines(ctx,state.album||"Mi álbum",W-2*M).slice(0,2);
+  const COV=380,rowH=118;
+  const blockH=tl.length*72+(state.artist?56:0)+40+COV+80+(top.length?60+top.length*rowH:0);
+  let y=Math.max(220,(H-blockH)/2-40);
+  // título
+  ctx.textAlign="left";ctx.textBaseline="alphabetic";ctx.fillStyle=css("--fg");
+  y+=56;tl.forEach((l,i)=>{ctx.fillText(l,M,y);if(i<tl.length-1)y+=72});
+  if(state.artist){y+=52;ctx.fillStyle=css("--muted");ctx.font=`600 36px ${css("--body")}`;ctx.fillText(state.artist,M,y)}
+  y+=40;
+  // portada + calificación
+  ctx.save();ctx.beginPath();ctx.roundRect(M,y,COV,COV,28);ctx.clip();
+  if(coverImg)ctx.drawImage(coverImg,M,y,COV,COV);else{ctx.fillStyle=css("--tile");ctx.fillRect(M,y,COV,COV)}
+  ctx.restore();
+  const sx=M+COV+48,sw=W-M-sx,midY=y+COV/2;
+  const txt=sc?fmtScore(sc.shown):"–";
+  let fs=230;ctx.font=`800 ${fs}px ${css("--display")}`;
+  while(ctx.measureText(txt).width>sw&&fs>120){fs-=10;ctx.font=`800 ${fs}px ${css("--display")}`}
+  const fw=58,fh=70,fg=16,flW=5*fw+4*fg;
+  const base=midY+fs*.18;
+  ctx.fillStyle=css("--fg");ctx.textAlign="center";ctx.textBaseline="alphabetic";
+  ctx.fillText(txt,sx+sw/2,base);
+  ctx.fillStyle=css("--muted");ctx.font=`600 34px ${css("--body")}`;ctx.fillText("de 10",sx+sw/2,base+52);
+  drawFlames(ctx,sx+(sw-flW)/2,base+88,fw,fh,fg,sc?sc.real/2:0);
+  y+=COV+80;
+  // top 5
+  if(top.length){
+    ctx.textAlign="left";ctx.fillStyle=css("--muted");ctx.font=`700 34px ${css("--body")}`;
+    ctx.fillText("TOP "+top.length,M,y);y+=24;
+    top.forEach((t,i)=>{
+      const ry=y+i*rowH;
+      ctx.fillStyle=css("--panel");rr(ctx,M,ry+8,W-2*M,rowH-16,24);
+      const cx=M+62,cy=ry+rowH/2+6;
+      if(i<3)medal(ctx,cx,cy,30,i+1);
+      else{ctx.fillStyle=css("--muted");ctx.font=`800 46px ${css("--display")}`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(i+1,cx,cy)}
+      const tr=TIERS[t.tier];ctx.font=`800 30px ${css("--display")}`;
+      const pw=ctx.measureText(tr.label).width+36,px=W-M-24-pw;
+      ctx.fillStyle=css(tr.color);rr(ctx,px,ry+rowH/2-26,pw,52,26);
+      ctx.fillStyle="#1a1a1a";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(tr.label,px+pw/2,ry+rowH/2+1);
+      ctx.fillStyle=css("--fg");ctx.textAlign="left";
+      let f=40;ctx.font=`700 ${f}px ${css("--body")}`;const maxW=px-24-(M+120);
+      let name=t.title;while(ctx.measureText(name).width>maxW&&f>28){f-=2;ctx.font=`700 ${f}px ${css("--body")}`}
+      while(ctx.measureText(name).width>maxW&&name.length>4)name=name.slice(0,-2).trimEnd()+"…";
+      ctx.fillText(name,M+120,ry+rowH/2+2);
+    });
+  }
+  ctx.textAlign="center";ctx.textBaseline="alphabetic";
+  ctx.fillStyle=css("--fg");ctx.font=`700 34px ${css("--body")}`;ctx.fillText("Haz el tuyo",W/2,H-150);
+  ctx.fillStyle=css("--muted");ctx.font=`600 30px ${css("--body")}`;ctx.fillText("elabram3.github.io/AlbumTierlist",W/2,H-106);
+  return c;
+}
+let lastBlob=null,lastBlob2=null;
 // ===== navegador de Instagram =====
 const UA=navigator.userAgent||"";
 const IN_IG=/Instagram|FBAN|FBAV/i.test(UA);
@@ -475,25 +582,29 @@ if(IN_IG){
     o.href=`intent://${url}#Intent;scheme=https;action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
   }
 }
-$("fullBtn").addEventListener("click",()=>{$("fullImg").src=$("previewImg").src;$("full").hidden=false});
+function openFull(src){$("fullImg").src=src;$("full").hidden=false}
+$("fullBtn").addEventListener("click",()=>openFull($("previewImg").src));
+$("previewImg").addEventListener("click",()=>openFull($("previewImg").src));
+$("previewImg2").addEventListener("click",()=>openFull($("previewImg2").src));
 $("full").addEventListener("click",()=>{$("full").hidden=true});
 
 $("exportBtn").addEventListener("click",async()=>{
-  const c=await exportImage();
-  $("previewImg").src=c.toDataURL("image/png");$("preview").hidden=false;
-  c.toBlob(b=>lastBlob=b,"image/png");
+  const c=await exportImage(),c2=await exportScoreImage();
+  $("previewImg").src=c.toDataURL("image/png");$("previewImg2").src=c2.toDataURL("image/png");$("preview").hidden=false;
+  c.toBlob(b=>lastBlob=b,"image/png");c2.toBlob(b=>lastBlob2=b,"image/png");
   $("preview").scrollIntoView({behavior:"smooth",block:"start"});
 });
 $("saveBtn").hidden=IN_IG;
-if(IN_IG)$("previewMsg").textContent="Dentro de Instagram usa la pantalla completa y toma captura.";
+$("previewMsg").textContent="Toca una imagen para verla en grande.";
+if(IN_IG)$("previewMsg").textContent="Dentro de Instagram toca cada imagen para verla en grande y toma captura.";
 $("saveBtn").textContent="Guardar o compartir";
 $("saveBtn").addEventListener("click",async()=>{
-  if(!lastBlob)return;
-  const name=(state.album||"tierlist").replace(/[^\w\- ]+/g,"")+" tierlist.png";
-  const file=new File([lastBlob],name,{type:"image/png"});
-  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});return}}catch(e){if(e.name==="AbortError")return}
-  const a=document.createElement("a");a.href=URL.createObjectURL(lastBlob);a.download=name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  if(!lastBlob||!lastBlob2)return;
+  const base=(state.album||"tierlist").replace(/[^\w\- ]+/g,"");
+  const files=[new File([lastBlob],base+" tierlist.png",{type:"image/png"}),new File([lastBlob2],base+" calificacion.png",{type:"image/png"})];
+  try{if(navigator.canShare&&navigator.canShare({files})){await navigator.share({files});return}}catch(e){if(e.name==="AbortError")return}
+  files.forEach((f,i)=>setTimeout(()=>{const a=document.createElement("a");a.href=URL.createObjectURL(f);a.download=f.name;a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),2000)},i*400));
 });
 
 // ===== inicio =====
