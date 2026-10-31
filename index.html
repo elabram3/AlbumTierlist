@@ -87,6 +87,18 @@ button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .iab p{margin:0;font-size:14px}
 .iab .iab-steps{color:var(--muted);font-size:13px}
 .iab-btn{display:block;text-align:center;background:var(--pick);color:#17171b;font-weight:700;border-radius:12px;padding:12px 16px;text-decoration:none}
+.hist{display:flex;flex-direction:column;gap:10px;min-width:0}
+.hist-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.hist-head h3{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.hist-clear{background:none;border:0;padding:4px 0;color:var(--muted);font-size:12px;font-weight:600}
+.hist-clear.confirm{color:#ff6b6b}
+.hist-row{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;margin-inline:-4px;padding-inline:4px;scrollbar-width:none}
+.hist-row::-webkit-scrollbar{display:none}
+.hist-item{position:relative;flex:0 0 92px;width:92px;min-width:0;scroll-snap-align:start;display:flex;flex-direction:column;gap:6px;background:none;border:0;padding:0;color:var(--fg);text-align:left;cursor:pointer}
+.hist-item img,.hist-item .ph-cov{width:92px;height:92px;border-radius:12px;object-fit:cover;background:var(--row);display:block}
+.hist-item .nm{display:block;width:92px;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hist-item .sc{position:absolute;top:66px;left:6px;background:rgba(10,10,14,.82);color:#fff;font-family:var(--display);font-weight:800;font-size:13px;padding:2px 8px;border-radius:999px}
+.hist-item .x{position:absolute;top:4px;right:4px;width:24px;height:24px;border-radius:50%;border:0;padding:0;background:rgba(10,10,14,.7);color:#fff;font-size:13px;line-height:24px;text-align:center;cursor:pointer}
 .sheet{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
 .sheet-card{width:100%;max-width:560px;box-sizing:border-box;background:var(--panel);border-radius:20px 20px 0 0;
   padding-block:18px calc(18px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
@@ -130,6 +142,14 @@ a (prefers-reduced-motion:reduce){.tile{transition:none}}
   </form>
   <div id="searchMsg" class="note" hidden></div>
   <div id="results" class="results"></div>
+
+  <section class="hist" id="hist" hidden>
+    <div class="hist-head">
+      <h3>Tus últimos tops</h3>
+      <button type="button" class="hist-clear" id="histClear">Borrar historial</button>
+    </div>
+    <div class="hist-row" id="histRow"></div>
+  </section>
 
   <div class="album">
     <div class="album-text">
@@ -360,7 +380,8 @@ async function pickAlbum(a,artistName){
     const songs=(d.data||[]).map(x=>x.title);
     if(!songs.length)throw new Error("empty");
     msg("");setAlbum(a.title,artistName||(a.artist&&a.artist.name)||"",songs);
-    colorFromCover(a.cover_medium);setCover(a.cover_big||a.cover_medium);
+    state.albumId=a.id;state.cover=a.cover_medium||"";state.coverBig=a.cover_big||a.cover_medium||"";
+    colorFromCover(state.cover);setCover(state.coverBig);
   }catch(e){msg("No pude cargar las canciones de ese álbum.")}
 }
 
@@ -648,7 +669,52 @@ $("previewImg").addEventListener("click",()=>openFull($("previewImg").src));
 $("previewImg2").addEventListener("click",()=>openFull($("previewImg2").src));
 $("full").addEventListener("click",()=>{$("full").hidden=true});
 
+// ===== historial =====
+const HKEY="albumtierlist.historial",HMAX=10;
+function loadHist(){try{const h=JSON.parse(localStorage.getItem(HKEY));return Array.isArray(h)?h:[]}catch(e){return[]}}
+function saveHist(h){try{localStorage.setItem(HKEY,JSON.stringify(h))}catch(e){}}
+function rememberTop(){
+  const sc=scoreOf();if(!sc||!state.album)return;
+  const key=state.histKey||(state.albumId?"id:"+state.albumId:"t:"+(state.album+"|"+state.artist).toLowerCase());
+  const entry={key,id:state.albumId||null,album:state.album,artist:state.artist,cover:state.cover||"",coverBig:state.coverBig||"",
+    score:sc.shown,tracks:state.tracks.map(t=>[t.title,t.tier]),ts:Date.now()};
+  const h=loadHist().filter(x=>x.key!==key);h.unshift(entry);saveHist(h.slice(0,HMAX));renderHist();
+}
+function openTop(e){
+  setAlbum(e.album,e.artist,e.tracks.map(t=>t[0]),e.tracks.map(t=>t[1]));
+  state.albumId=e.id;state.cover=e.cover;state.coverBig=e.coverBig;state.histKey=e.key;
+  applyTile(DEFAULT_TILE);if(e.cover){colorFromCover(e.cover);setCover(e.coverBig||e.cover)}
+  $("results").innerHTML="";msg("");
+  document.querySelector(".album").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function renderHist(){
+  const h=loadHist(),row=$("histRow");row.innerHTML="";$("hist").hidden=!h.length;
+  h.forEach(e=>{
+    const b=document.createElement("div");b.className="hist-item";b.tabIndex=0;b.setAttribute("role","button");
+    b.setAttribute("aria-label",`Abrir ${e.album}, ${fmtScore(e.score)} de 10`);
+    let cov;
+    if(e.cover){cov=document.createElement("img");cov.src=e.cover;cov.alt="";cov.loading="lazy"}
+    else{cov=document.createElement("div");cov.className="ph-cov"}
+    const sc=document.createElement("span");sc.className="sc";sc.textContent=fmtScore(e.score);
+    const nm=document.createElement("span");nm.className="nm";nm.textContent=e.album;
+    const x=document.createElement("button");x.type="button";x.className="x";x.textContent="✕";x.setAttribute("aria-label","Quitar "+e.album);
+    x.addEventListener("click",ev=>{ev.stopPropagation();saveHist(loadHist().filter(y=>y.key!==e.key));renderHist()});
+    b.append(cov,sc,nm,x);
+    b.addEventListener("click",()=>openTop(e));
+    b.addEventListener("keydown",ev=>{if(ev.key==="Enter")openTop(e)});
+    row.appendChild(b);
+  });
+}
+let histTimer=null;
+$("histClear").addEventListener("click",()=>{
+  const b=$("histClear");
+  if(!b.classList.contains("confirm")){b.classList.add("confirm");b.textContent="¿Seguro? Toca otra vez";
+    histTimer=setTimeout(()=>{b.classList.remove("confirm");b.textContent="Borrar historial"},3000);return}
+  clearTimeout(histTimer);b.classList.remove("confirm");b.textContent="Borrar historial";saveHist([]);renderHist();
+});
+
 $("exportBtn").addEventListener("click",async()=>{
+  rememberTop();
   const c=await exportImage(),c2=await exportScoreImage();
   $("previewImg").src=c.toDataURL("image/png");$("previewImg2").src=c2.toDataURL("image/png");$("preview").hidden=false;
   c.toBlob(b=>lastBlob=b,"image/png");c2.toBlob(b=>lastBlob2=b,"image/png");
@@ -668,7 +734,7 @@ $("saveBtn").addEventListener("click",async()=>{
 });
 
 // ===== inicio =====
-render();
+render();renderHist();
 </script>
 
 </body>
