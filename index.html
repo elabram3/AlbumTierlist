@@ -559,7 +559,7 @@ function scoreOf(){
   let shown;
   if(placed.every(t=>t.tier===0))shown=10;
   else if(real>=9.45)shown=Math.min(9.9,Math.round(real*10)/10);
-  else{const i=Math.floor(real),f=Math.round((real-i)*1e6)/1e6;shown=f<0.4?i:f<=0.6?i+0.5:i+1}
+  else{const q=Math.round(real*4)/4,i=Math.floor(q),f=q-i;shown=i+(f===0.25?0.2:f===0.75?0.8:f)}
   return{real,shown};
 }
 function fmtScore(n){return Number.isInteger(n)?String(n):n.toFixed(1)}
