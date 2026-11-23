@@ -43,7 +43,8 @@ button:focus-visible,input:focus-visible,.tile:focus-visible,.drop:focus-visible
 .chips{display:flex;gap:6px;flex-wrap:wrap}
 .chip{display:flex;align-items:center;gap:8px;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:6px 14px 6px 6px;font-weight:700}
 .chip img{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--row)}
-.chip small{color:var(--muted);font-weight:600;font-size:12px}
+.chip span{white-space:nowrap}
+.chip small{color:var(--muted);font-weight:600;font-size:12px;white-space:nowrap}
 .back{align-self:flex-start;background:transparent;color:var(--muted);padding:4px 0;font-weight:600}
 .result small{display:block;color:var(--muted);font-weight:400}
 
@@ -108,7 +109,7 @@ button.danger.confirm{background:#ff4d4d;color:#17171b;border-color:#ff4d4d}
 .sheet-row{display:flex;gap:10px;align-items:center}
 .sheet-row input[type=text]{flex:1;min-width:0;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;font-weight:700}
 .sheet-item{display:flex;flex-direction:column;gap:8px}
-.chip{width:48px;height:44px;flex:0 0 48px;border:2px solid var(--line);border-radius:10px;padding:0;cursor:pointer}
+.cchip{width:48px;height:44px;flex:0 0 48px;border:2px solid var(--line);border-radius:10px;padding:0;cursor:pointer}
 .swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:10px;background:var(--bg);border-radius:12px}
 .sw{aspect-ratio:1;max-width:100%;border-radius:50%;border:0;padding:0;cursor:pointer;box-shadow:inset 0 0 0 2px rgba(0,0,0,.15)}
 .sw.on{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
@@ -439,7 +440,7 @@ function buildSheet(){
   TIERS.forEach((tr,i)=>{
     const item=document.createElement("div");item.className="sheet-item";
     const r=document.createElement("div");r.className="sheet-row";
-    const chip=document.createElement("button");chip.type="button";chip.className="chip";chip.style.background=tr.color;
+    const chip=document.createElement("button");chip.type="button";chip.className="cchip";chip.style.background=tr.color;
     chip.setAttribute("aria-label","Color de la fila "+(i+1));
     chip.addEventListener("click",()=>{openSw=openSw===i?-1:i;buildSheet()});
     const tx=document.createElement("input");tx.type="text";tx.id="tierText"+i;tx.value=tr.label;tx.maxLength=24;tx.setAttribute("aria-label","Texto de la fila "+(i+1));
